@@ -1,12 +1,6 @@
-from asn1crypto import core, ocsp, x509, algos, pem
 import sys
 import _helper_functions as hf
-from urllib import request
-import os
-
-class OCSPValidationError(Exception):
-
-    pass
+from exceptions import OCSPNonceMismatchError
 
 def get_ocsp_response(cert_file, issuer_file, algo='sha1', nonce=True, timeout=20):
 	try:
@@ -24,22 +18,18 @@ def get_ocsp_response(cert_file, issuer_file, algo='sha1', nonce=True, timeout=2
 	if not isinstance(nonce, bool):
 		raise TypeError("{} is not a boolean value for nonce".format(nonce))
 
+	if not isinstance(timeout, int):
+		raise TypeError("{} is not an integer value for timeout".format(timeout))
+
 	ocsp_request_obj = hf.return_ocsp_request_object(cert, issuer, algo, nonce)
 
-	headers = {
-		'Content-Type': 'application/ocsp_request',
-		'Accept': 'application/ocsp-response'
-	}
 	for ocsp_url in cert.ocsp_urls:
-		try:
-			ocsp_request = request.Request(ocsp_url, headers=headers)
-			ocsp_response = request.urlopen(ocsp_request, ocsp_request_obj.dump(), timeout)
-			ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response.read())
+		try:		
+			ocsp_response_obj = hf.make_ocsp_request(ocsp_url, ocsp_request_obj, timeout)
 			request_nonce = ocsp_request_obj.nonce_value
 			response_nonce = ocsp_response_obj.nonce_value
 			if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
-				raise OCSPValidationError('Unable to verify OCSP response since the request and response nonces do not match')
-			
+				raise OCSPNonceMismatchError('Unable to verify OCSP response since the request and response nonces do not match')
 			print (ocsp_response_obj['response_status'].native)
 		except Exception as e:
 			print (e)

@@ -1,0 +1,2 @@
+class OCSPNonceMismatchError(Exception):
+  pass

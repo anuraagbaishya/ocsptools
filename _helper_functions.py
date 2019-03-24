@@ -1,5 +1,6 @@
 from asn1crypto import core, x509, pem, ocsp, algos
 import os
+from urllib import request
 
 def return_cert_from_file(filename):
 	with open(filename, 'rb') as f:
@@ -39,3 +40,13 @@ def return_ocsp_request_object(cert, issuer, algo, nonce=True):
 	})	
 
 	return ocsp_request_obj
+
+def make_ocsp_request(ocsp_url, ocsp_request_obj, timeout=20):
+	headers = {
+		'Content-Type': 'application/ocsp_request',
+		'Accept': 'application/ocsp-response'
+	}
+	ocsp_request = request.Request(ocsp_url, headers=headers)
+	ocsp_response = request.urlopen(ocsp_request, ocsp_request_obj.dump(), timeout)
+	ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response.read())
+	return ocsp_response_obj
