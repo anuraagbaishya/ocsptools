@@ -26,6 +26,7 @@ def get_ocsp_response(cert_file, issuer_file, algo='sha1', nonce=True, timeout=2
 	for ocsp_url in cert.ocsp_urls:
 		try:		
 			ocsp_response_obj = hf.make_ocsp_request(ocsp_url, ocsp_request_obj, timeout)
+			print (ocsp_response_obj)
 			request_nonce = ocsp_request_obj.nonce_value
 			response_nonce = ocsp_response_obj.nonce_value
 			if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
