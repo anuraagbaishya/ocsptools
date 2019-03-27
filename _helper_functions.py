@@ -48,6 +48,7 @@ def make_ocsp_request(ocsp_url, ocsp_request_obj, timeout=20):
 	}
 	ocsp_request = request.Request(ocsp_url, headers=headers)
 	ocsp_response = request.urlopen(ocsp_request, ocsp_request_obj.dump(), timeout)
-	print ("HF", ocsp_response.content)
-	ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response.read())
+	ocsp_response_data = ocsp_response.read()
+	ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response_data)
+	print ('HF', ocsp_response_obj['response_status'].native)
 	return ocsp_response_obj
