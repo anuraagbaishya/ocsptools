@@ -43,12 +43,14 @@ def return_ocsp_request_object(cert, issuer, algo, nonce=True):
 
 def make_ocsp_request(ocsp_url, ocsp_request_obj, timeout=20):
 	headers = {
-		'Content-Type': 'application/ocsp_request',
+		'Content-Type': 'application/ocsp-request',
 		'Accept': 'application/ocsp-response'
 	}
-	ocsp_request = request.Request(ocsp_url, headers=headers)
-	ocsp_response = request.urlopen(ocsp_request, ocsp_request_obj.dump(), timeout)
-	ocsp_response_data = ocsp_response.read()
-	ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response_data)
-	print ('HF', ocsp_response_obj['response_status'].native)
-	return ocsp_response_obj
+	try:
+		ocsp_request = request.Request(ocsp_url, headers=headers)
+		ocsp_response = request.urlopen(ocsp_request, ocsp_request_obj.dump(), timeout)
+		ocsp_response_data = ocsp_response.read()
+		ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response_data)
+		return ocsp_response_obj
+	except Exception as e:
+		print(e)
