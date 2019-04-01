@@ -33,3 +33,4 @@ for d in domains:
 	with open (os.path.join("chain", filename_chain), "w+") as f:
 		for c in cert_chain:
 			f.write(c)
+		f.close()

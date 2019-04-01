@@ -30,8 +30,8 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 	errors = []
 	for ocsp_response_obj in ocsp_response_objs:
 		if (ocsp_response_obj['response_status'].native == 'malformed_request'):
-			errors.append('Unable to verify OCSP response as server returned malformed request')
-			exit()
+			errors.append('Failed to query OCSP responder')
+			return errors
 		request_nonce = ocsp_request_obj.nonce_value
 		response_nonce = ocsp_response_obj.nonce_value
 		if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
