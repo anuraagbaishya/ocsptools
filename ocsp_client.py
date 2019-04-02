@@ -1,7 +1,8 @@
 import sys
 import _helper_functions as hf
 from datetime import datetime, timezone
-
+from certvalidator.registry import CertificateRegistry
+from oscrypto import asymmetric
 def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
 
 	if algo not in ('sha1', 'sha256'):
@@ -76,7 +77,31 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 		if current_time > next_update_time:
 			errors.append('OCSP reponse next update time is in the past')
 
-		return errors
+		trust_roots = []
+		trust_roots.append(issuer)	
+		registry = CertificateRegistry(trust_roots=trust_roots)
+		path = registry.build_paths(cert)[0]
+		issuer = path.find_issuer(cert)
+
+		if tbs_response['responder_id'].name == 'by_key':
+			key_identifier = tbs_response['responder_id'].native
+			signing_cert = registry.retrieve_by_key_identifier(key_identifier)
+			if signing_cert is None:
+				errors.append('OCSP response signing certificate not found')
+			print (issuer.issuer_serial == signing_cert.issuer_serial)
+			
+
+		sig_algo = parsed_response['signature_algorithm'].signature_algo
+		hash_algo = parsed_response['signature_algorithm'].hash_algo
+		if sig_algo == 'rsassa_pkcs1v15':
+			verify_func = asymmetric.rsa_pkcs1v15_verify
+		elif sig_algo == 'dsa':
+			verify_func = asymmetric.dsa_verify
+		elif sig_algo == 'ecdsa':
+			verify_func = asymmetric.ecdsa_verify
+		else:
+			errors.append('OCSP response signature uses unsupported algorithm')
+		#return errors
 	
 if __name__ == '__main__':
 
@@ -95,12 +120,13 @@ if __name__ == '__main__':
 	response = get_ocsp_response(cert, issuer, 'sha256', True)
 	ocsp_request = response[0]
 	ocsp_responses = response[1]
-	errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+	validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+	# errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
 
-	print ("Total Errors: "+str(len(errors)))
+	# print ("Total Errors: "+str(len(errors)))
 
-	for error in errors:
-		print (error)
+	# for error in errors:
+	# 	print (error)
 
 
 
