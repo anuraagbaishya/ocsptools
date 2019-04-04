@@ -32,18 +32,22 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 	for ocsp_response_obj in ocsp_response_objs:
 		if (ocsp_response_obj['response_status'].native == 'malformed_request'):
 			errors.append('Failed to query OCSP responder')
-			return errors
+			continue
+
 		request_nonce = ocsp_request_obj.nonce_value
 		response_nonce = ocsp_response_obj.nonce_value
 		if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
 			errors.append('Unable to verify OCSP response since the request and response nonces do not match')
+			continue
 
 		if ocsp_response_obj['response_status'].native != 'successful':
 			errors.append('OCSP check returned as failed')
-			
+			continue
+
 		response_bytes = ocsp_response_obj['response_bytes']
 		if response_bytes['response_type'].native != 'basic_ocsp_response':
 			errors.append('Response is {}. Must be Basic OCSP Response'.format(response_bytes['response_type'].native))
+			continue
 
 		parsed_response = response_bytes['response'].parsed
 		tbs_response = parsed_response['tbs_response_data']
@@ -76,32 +80,99 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 		next_update_time = certificate_response['next_update'].native
 		if current_time > next_update_time:
 			errors.append('OCSP reponse next update time is in the past')
-
-		trust_roots = []
-		trust_roots.append(issuer)	
-		registry = CertificateRegistry(trust_roots=trust_roots)
-		path = registry.build_paths(cert)[0]
-		issuer = path.find_issuer(cert)
+	
+		registry = CertificateRegistry(trust_roots=[issuer])
 
 		if tbs_response['responder_id'].name == 'by_key':
 			key_identifier = tbs_response['responder_id'].native
 			signing_cert = registry.retrieve_by_key_identifier(key_identifier)
 			if signing_cert is None:
 				errors.append('OCSP response signing certificate not found')
-			print (issuer.issuer_serial == signing_cert.issuer_serial)
-			
+
+		# if not registry.is_ca(signing_cert):
+		# 	signing_cert_paths = certificate_registry.build_paths(signing_cert)
+		# 	for signing_cert_path in signing_cert_paths:
+		# 		try:
+		# 			# Store the original revocation check value
+		# 			changed_revocation_flags = False
+
+		# 			skip_ocsp = False if signing_cert.ocsp_no_check_value is not None else True
+		# 			skip_ocsp = True if signing_cert_path == path else False
+
+			#TODO: Understand this code!
+			# 		if skip_ocsp and validation_context._skip_revocation_checks is False:
+			# 			changed_revocation_flags = True
+
+			# 			original_revocation_mode = validation_context.revocation_mode
+			# 			new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
+
+			# 			validation_context._skip_revocation_checks = True
+			# 			validation_context._revocation_mode = new_revocation_mode
+
+			# 		if end_entity_name_override is None and signing_cert.sha256 != issuer.sha256:
+			# 			end_entity_name_override = cert_description + ' OCSP responder'
+			# 		_validate_path(
+			# 			validation_context,
+			# 			signing_cert_path,
+			# 			end_entity_name_override=end_entity_name_override
+			# 		)
+			# 		signing_cert_issuer = signing_cert_path.find_issuer(signing_cert)
+			# 		break
+
+			# 	except (PathValidationError):
+			# 		continue
+
+			# 	finally:
+			# 		if changed_revocation_flags:
+			# 			validation_context._skip_revocation_checks = False
+			# 			validation_context._revocation_mode = original_revocation_mode
+
+			# else:
+			# 	failures.append((
+			# 		pretty_message(
+			# 			'''
+			# 			Unable to verify OCSP response since response signing
+			# 			certificate could not be validated
+			# 			'''
+			# 		),
+			# 		ocsp_response
+			# 	))
+			# 	continue
+	
+		if issuer.issuer_serial != signing_cert.issuer_serial:
+			if signing_cert_issuer.issuer_serial != issuer.issuer_serial:
+				errors.append('OCSP response signed by unauthorized certificate')
+
+			extended_key_usage = signing_cert.extended_key_usage_value
+			if 'ocsp_signing' not in extended_key_usage.native:
+				errors.append('OCSP response signing certificate is not the issuing certificate and it does not have value "ocsp_signing"\
+					for the extended key usage extension')				
+
 
 		sig_algo = parsed_response['signature_algorithm'].signature_algo
 		hash_algo = parsed_response['signature_algorithm'].hash_algo
-		if sig_algo == 'rsassa_pkcs1v15':
-			verify_func = asymmetric.rsa_pkcs1v15_verify
-		elif sig_algo == 'dsa':
-			verify_func = asymmetric.dsa_verify
-		elif sig_algo == 'ecdsa':
-			verify_func = asymmetric.ecdsa_verify
-		else:
-			errors.append('OCSP response signature uses unsupported algorithm')
-		#return errors
+		try:
+			check_cert = asymmetric.load_certificate(signing_cert)
+			if sig_algo == 'rsassa_pkcs1v15':
+				asymmetric.rsa_pkcs1v15_verify(check_cert, parsed_response['signature'].native, tbs_response.dump(), hash_algo)
+			elif sig_algo == 'dsa':
+				asymmetric.dsa_verify(check_cert, parsed_response['signature'].native, tbs_response.dump(), hash_algo)
+			elif sig_algo == 'ecdsa':
+				asymmetric.ecdsa_verify(check_cert, parsed_response['signature'].native, tbs_response.dump(), hash_algo)
+			else:
+				errors.append('OCSP response signature uses unsupported algorithm')
+
+		except(oscrypto.errors.SignatureError):
+			errors.append('OCSP response signature could not be verified')
+
+		if certificate_response['cert_status'].name == 'revoked':
+			revocation_data = certificate_response['cert_status'].chosen
+			if revocation_data['revocation_reason'].native is None:
+				errors.append('Certificate revoked due to unknown reason')
+			else:
+				errors.append('Certicate revoked due to ' + revocation_data['revocation_reason'].human_friendly)	
+
+		return errors
 	
 if __name__ == '__main__':
 
@@ -120,13 +191,16 @@ if __name__ == '__main__':
 	response = get_ocsp_response(cert, issuer, 'sha256', True)
 	ocsp_request = response[0]
 	ocsp_responses = response[1]
-	validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
-	# errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+	
+	errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+	if len(errors) > 0:
+		print ("Total Errors: "+str(len(errors)))
 
-	# print ("Total Errors: "+str(len(errors)))
+		for error in errors:
+			print (error)
 
-	# for error in errors:
-	# 	print (error)
+	else:
+		print("No errors in OCSP response")
 
 
 
