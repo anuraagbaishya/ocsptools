@@ -30,24 +30,22 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 
 	errors = []
 	for ocsp_response_obj in ocsp_response_objs:
+		print (ocsp_response_obj['response_status'].native)
 		if (ocsp_response_obj['response_status'].native == 'malformed_request'):
 			errors.append('Failed to query OCSP responder')
-			continue
+			return errors
 
 		request_nonce = ocsp_request_obj.nonce_value
 		response_nonce = ocsp_response_obj.nonce_value
 		if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
 			errors.append('Unable to verify OCSP response since the request and response nonces do not match')
-			continue
 
 		if ocsp_response_obj['response_status'].native != 'successful':
 			errors.append('OCSP check returned as failed')
-			continue
 
 		response_bytes = ocsp_response_obj['response_bytes']
 		if response_bytes['response_type'].native != 'basic_ocsp_response':
 			errors.append('Response is {}. Must be Basic OCSP Response'.format(response_bytes['response_type'].native))
-			continue
 
 		parsed_response = response_bytes['response'].parsed
 		tbs_response = parsed_response['tbs_response_data']
@@ -173,34 +171,34 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 				errors.append('Certicate revoked due to ' + revocation_data['revocation_reason'].human_friendly)	
 
 		return errors
+
+# if __name__ == '__main__':
+
+# 	cert_file = sys.argv[1]
+# 	issuer_file = sys.argv[2]
+# 	try:
+# 		cert = hf.return_cert_from_file(cert_file)
+# 	except ValueError:
+# 		raise TypeError("{} is not a valid x509 certificate".format(cert_file))
+# 	try:
+# 		issuer = hf.return_cert_from_file(issuer_file)
+# 	except ValueError:
+# 		raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
+
+# 	current_time = datetime.now(timezone.utc)	
+# 	response = get_ocsp_response(cert, issuer, 'sha256', True)
+# 	ocsp_request = response[0]
+# 	ocsp_responses = response[1]
 	
-if __name__ == '__main__':
+# 	errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+# 	if len(errors) > 0:
+# 		print ("Total Errors: "+str(len(errors)))
 
-	cert_file = sys.argv[1]
-	issuer_file = sys.argv[2]
-	try:
-		cert = hf.return_cert_from_file(cert_file)
-	except ValueError:
-		raise TypeError("{} is not a valid x509 certificate".format(cert_file))
-	try:
-		issuer = hf.return_cert_from_file(issuer_file)
-	except ValueError:
-		raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
+# 		for error in errors:
+# 			print (error)
 
-	current_time = datetime.now(timezone.utc)	
-	response = get_ocsp_response(cert, issuer, 'sha256', True)
-	ocsp_request = response[0]
-	ocsp_responses = response[1]
-	
-	errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
-	if len(errors) > 0:
-		print ("Total Errors: "+str(len(errors)))
-
-		for error in errors:
-			print (error)
-
-	else:
-		print("No errors in OCSP response")
+# 	else:
+# 		print("No errors in OCSP response")
 
 
 

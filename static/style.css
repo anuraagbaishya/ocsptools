@@ -1,0 +1,21 @@
+#certificate-input-form{
+	margin-top: 50px;
+}
+
+#file-upload{
+	margin: 10px;
+}
+
+#file-type-label{
+	margin: 10px;
+}
+
+#submit-button{
+	width: 200px;
+	height: 40px;
+	margin: 10px;
+}
+
+center{
+	margin: 25px;
+}
