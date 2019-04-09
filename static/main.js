@@ -42,7 +42,13 @@ $(document).ready(function () {
         var ul = document.getElementById("lint-list");
         for (var key in json_obj){
             if (json_obj.hasOwnProperty(key)){
-                ul.appendChild(return_li(json_obj[key], key));
+                if (key == "NoFailure"){
+                    ul.appendChild(return_li(key, json_obj[key], 0))
+                    break;
+                }
+                else{
+                    ul.appendChild(return_li(key, json_obj[key], 1));
+                }
             }
         }
 
@@ -50,17 +56,23 @@ $(document).ready(function () {
 
 });
 
-function return_li(data, key, flag){
+function return_li(key, data, flag){
 
-    var list = document.createElement('li');
-    list.setAttribute("id", key)
+    var list_item = document.createElement('li');
+    list_item.setAttribute("id", key);
+    list_item.setAttribute("class", "lint-list-item");
     var img = document.createElement('img');
-    img.setAttribute("src", "/static/images/success.png")
-    img.setAttribute("height", "32px")
-    img.setAttribute("width", "32px")
-    list.appendChild(img)
-    var p = document.createElement('p')
-    p.innerHTML = data
-    list.append(p)
-    return list
+    if (flag == 0){
+        img.setAttribute("src", "/static/images/success.png");
+    }
+    else{
+        img.setAttribute("src", "/static/images/error.png")
+    }
+    img.setAttribute("height", "25px");
+    img.setAttribute("width", "25px");
+    list_item.appendChild(img);
+    var p = document.createElement('p');
+    p.innerHTML = data;
+    list_item.append(p);
+    return list_item;
 }
