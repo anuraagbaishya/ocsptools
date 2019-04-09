@@ -13,7 +13,11 @@ os.makedirs(os.path.join(app.instance_path, 'chain'), exist_ok=True)
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+	return render_template('index.html')
+
+@app.route('/response')
+def test():
+	return render_template('response.html')
 
 @app.route('/response-check', methods=['POST'])
 def response_check():
@@ -43,17 +47,7 @@ def response_check():
 			ocsp_responses = response[1]
 
 			errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
-
-			if len(errors) > 0:
-				response_string += "<h3>Total Errors: "+str(len(errors))+"</h3></br>"
-
-				for error in errors:
-					response_string += "<p>"+error+"</p></br>"
-
-			else:
-				response_string = "No errors in OCSP response"
-
-	return response_string
+			return errors
 
 if __name__ == "__main__":
-    app.run(debug=True,host='0.0.0.0', port=4000)
+	app.run(debug=True,host='0.0.0.0', port=4000)
