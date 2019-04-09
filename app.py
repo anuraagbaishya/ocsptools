@@ -6,20 +6,20 @@ import _helper_functions as hf
 import os
 
 cwd = os.getcwd()
-app = Flask(__name__, instance_path=cwd+'/uploads')
+app = Flask(__name__, instance_path=cwd+'/uploads', static_url_path='/static')
 
 os.makedirs(os.path.join(app.instance_path, 'cert'), exist_ok=True)
 os.makedirs(os.path.join(app.instance_path, 'chain'), exist_ok=True)
 
-@app.route('/')
+@app.route('/', methods=['GET','POST'])
 def home():
 	return render_template('index.html')
 
-@app.route('/response')
-def test():
+@app.route('/response', methods=['GET','POST'])
+def response():
 	return render_template('response.html')
 
-@app.route('/response-check', methods=['POST'])
+@app.route('/response-check', methods=['GET','POST'])
 def response_check():
 	response_string = ""
 	if request.method == 'POST':

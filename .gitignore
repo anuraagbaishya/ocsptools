@@ -4,3 +4,5 @@ venv/
 *.pyc
 test.py
 /uploads
+.DS_Store
+/static/.DS_Store

@@ -19,3 +19,21 @@
 center{
 	margin: 25px;
 }
+ul {
+  list-style-type: none;
+  width: 500px;
+}
+ 
+li img {
+  float: left;
+  margin: 0 15px 0 0;
+}
+ 
+li p {
+  font: 200 16px/1.5 serif;
+}
+ 
+li {
+  padding: 10px;
+  overflow: auto;
+}
