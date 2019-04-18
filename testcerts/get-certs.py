@@ -27,9 +27,14 @@ def main(domain_file):
             certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
             #certs = re.search(r'-----BEGIN CERTIFICATE-----(.*)-----END CERTIFICATE-----',output.decode('utf-8')) TODO Optional way to do it
             #print("Cert from {0}:\n {1}".format(d, certs))
-            print("...done") 
-            cert = certs[0]
-            cert_chain = certs[1:]
+            if len(certs) == 0:
+                cert = "NOT FOUND"
+                cert_chain = ["NOT FOUND"]
+                print("...failed") 
+            else:
+                print("...done")
+                cert = certs[0]
+                cert_chain = certs[1:]
             filename = d + ".pem"
             filename_chain = d + "-chain.pem" 
             with open (os.path.join("cert", filename), "w+") as f:

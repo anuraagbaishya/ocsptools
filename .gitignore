@@ -2,6 +2,9 @@ __pycache__/
 venv/
 *.crt
 *.pyc
+*.pem
+*.csv
+testcerts/test
 test.py
 /uploads
 .DS_Store
