@@ -2,7 +2,8 @@ import subprocess as sub
 import shlex
 import sys, os
 import re
-
+import requests
+from urllib.parse import urlparse
 def find_between(s, first, last):
     result = []
     while last in s:
@@ -12,55 +13,92 @@ def find_between(s, first, last):
         s = s[end+len(last):]
     return result
 
+def find_errors(error):
+    if "handshake failure" in error:
+        return "handshake failure"
+    elif "Connection refused" in error:
+        return "connection refused"
+    elif "gethostbyname failure" in error:
+        return "hostname not found"
+    else:
+        return "errored"
+
+def openssl_call(domain):
+    cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443"
+    cmdarg = shlex.split(cmd)
+    p = sub.Popen(cmdarg,stdin =sub.PIPE, stdout=sub.PIPE,stderr=sub.PIPE)
+    output, errors = (p.communicate())
+    return (output, errors)
+
+def check_certs(output, errors):
+
+    if output.decode('utf-8') != "":
+        certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
+        #certs = re.search(r'-----BEGIN CERTIFICATE-----(.*)-----END CERTIFICATE-----',output.decode('utf-8')) TODO Optional way to do it
+        #print("Cert from {0}:\n {1}".format(d, certs)) 
+        if len(certs) == 0:
+            error = find_errors(errors.decode('utf-8'))
+            cert = error
+            cert_chain = [error]
+            print("..." + error)
+        else:
+            print("...done")
+            cert = certs[0]
+            cert_chain = certs[1:]
+    elif errors.decode('utf-8') != "":
+
+        error = find_errors(errors.decode('utf-8'))
+        cert = error
+        cert_chain = [error]
+        print("..." + error)
+
+    elif output.decode('utf-8') == "":
+        cert = "TIMED OUT"
+        cert_chain = ["TIMED OUT"]
+        print("...timed out")    
+
+    return (cert, cert_chain)    
+
 def main(domain_file):
-#TODO Add timeout functionality
+    output, errors = b"", b""
     try:
         with open(domain_file, "r") as f:
             domains = f.readlines()
         for d in domains:
             d = d.replace("\n", "")
             filename = d + ".pem"
-            filename_chain = d + "-chain.pem" 
+            filename_chain = d + "-chain.pem"
             print("Retrieving certificate from {}...".format(d), end='')
-            cmd = "timeout 10 openssl s_client -showcerts -connect " + d +":443"
-            cmdarg = shlex.split(cmd)
-            p = sub.Popen(cmdarg,stdin =sub.PIPE, stdout=sub.PIPE,stderr=sub.PIPE)
-            output, errors = (p.communicate())
-            if errors.decode('utf-8') != "":
-                error = errors.decode('utf-8')
-                if "handshake failure" in error:
-                    cert = "HANDSHAKE FAILURE"
-                    cert_chain = ["HANDSHAKE FAILURE"]
-                    print ("...handshake failure")
-                elif "Connection refused" in error:
-                    cert = "CONNECTION REFUSED"
-                    cert_chain = ["CONNECTION REFUSED"]
-                    print ("...connection refused")
-                elif "gethostbyname failure" in error:
-                    print ("...hostname not found")
-                    continue
-                else:
-                    cert = "OTHER ERROR"
-                    cert_chain = ["OTHER ERROR"]
-                    print ("...errored")
-            elif output.decode('utf-8') == "":
-                cert = "TIMED OUT"
-                cert_chain = ["TIMED OUT"]
-                print("...timed out")
-            else:
-                certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
-                #certs = re.search(r'-----BEGIN CERTIFICATE-----(.*)-----END CERTIFICATE-----',output.decode('utf-8')) TODO Optional way to do it
-                #print("Cert from {0}:\n {1}".format(d, certs)) 
-                print("...done")
-                cert = certs[0]
-                cert_chain = certs[1:]
-            with open (os.path.join("cert", filename), "w+") as f:
-                f.write(cert)
-                f.close()
-            with open (os.path.join("chain", filename_chain), "w+") as f:
-                for c in cert_chain:
-                    f.write(c)
-                f.close()
+            
+            out = openssl_call(d)
+            output = out[0]
+            errors = out[1]
+
+            error = find_errors(errors.decode('utf-8'))
+            
+            if error == "handshake failure":
+                print ("...redirecting")
+                try:
+                    r = requests.get("https://"+d)
+                    url = urlparse(r.url).hostname
+                    out = openssl_call(url)
+                    output = out[0]
+                    errors = out[1]
+                except:
+                    pass
+
+            cert_data = check_certs(output, errors)
+
+            if cert_data[0] != "hostname not found":
+
+                with open (os.path.join("cert", filename), "w+") as f:
+                    f.write(cert_data[0])
+                    f.close()
+                with open (os.path.join("chain", filename_chain), "w+") as f:
+                    for c in cert_data[1]:
+                        f.write(c)
+                    f.close()
+
     except (OSError, IOError) as e:
         print("Error in opening file {}".format(domain_file))
         print(e)
