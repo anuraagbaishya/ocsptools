@@ -26,22 +26,34 @@ def main(domain_file):
             cmdarg = shlex.split(cmd)
             p = sub.Popen(cmdarg,stdin =sub.PIPE, stdout=sub.PIPE,stderr=sub.PIPE)
             output, errors = (p.communicate())
-            if output.decode('utf-8') == "":
+            if errors.decode('utf-8') != "":
+                error = errors.decode('utf-8')
+                if "handshake failure" in error:
+                    cert = "HANDSHAKE FAILURE"
+                    cert_chain = ["HANDSHAKE FAILURE"]
+                    print ("...handshake failure")
+                elif "Connection refused" in error:
+                    cert = "CONNECTION REFUSED"
+                    cert_chain = ["CONNECTION REFUSED"]
+                    print ("...connection refused")
+                elif "gethostbyname failure" in error:
+                    print ("...hostname not found")
+                    continue
+                else:
+                    cert = "OTHER ERROR"
+                    cert_chain = ["OTHER ERROR"]
+                    print ("...errored")
+            elif output.decode('utf-8') == "":
                 cert = "TIMED OUT"
                 cert_chain = ["TIMED OUT"]
-                print("...timed out") 
+                print("...timed out")
             else:
                 certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
                 #certs = re.search(r'-----BEGIN CERTIFICATE-----(.*)-----END CERTIFICATE-----',output.decode('utf-8')) TODO Optional way to do it
-                #print("Cert from {0}:\n {1}".format(d, certs))
-                if len(certs) == 0:
-                    cert = "NOT FOUND"
-                    cert_chain = ["NOT FOUND"]
-                    print("...failed") 
-                else:
-                    print("...done")
-                    cert = certs[0]
-                    cert_chain = certs[1:]
+                #print("Cert from {0}:\n {1}".format(d, certs)) 
+                print("...done")
+                cert = certs[0]
+                cert_chain = certs[1:]
             with open (os.path.join("cert", filename), "w+") as f:
                 f.write(cert)
                 f.close()
