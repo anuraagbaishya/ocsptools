@@ -3,7 +3,8 @@ import _helper_functions as hf
 from datetime import datetime, timezone
 from certvalidator.registry import CertificateRegistry
 from oscrypto import asymmetric
-import json
+import json, pprint
+
 def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
 
     if algo not in ('sha1', 'sha256'):
@@ -28,8 +29,15 @@ def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
     return (ocsp_request_obj, ocsp_response_objs)
 
 def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, current_time):
+#    print(cert['tbs_certificate']['subject'].native)
+#    print(subject['common_name'])
+#    print(cert.issuer.native)
+#    print(issuer.issuer.native)
+    subject = cert['tbs_certificate']['subject'].native
+    issuer_fields = cert.issuer.native
 
-    errors ={}
+    errors = {'domain': subject['common_name'], 'issuer': issuer_fields['organization_name']}
+    warnings = {'domain': subject['common_name'], 'issuer': issuer_fields['organization_name']}
     for ocsp_response_obj in ocsp_response_objs:
         if (ocsp_response_obj['response_status'].native == 'malformed_request'):
             errors['ResponseFailure'] = 'Failed to query OCSP responder'
@@ -46,11 +54,19 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         response_bytes = ocsp_response_obj['response_bytes']
         if response_bytes['response_type'].native != 'basic_ocsp_response':
             errors['ResponseTypeFailure'] = 'OCSP response is not Basic OCSP Response'
-
+    
         parsed_response = response_bytes['response'].parsed
         tbs_response = parsed_response['tbs_response_data']
         certificate_response = tbs_response['responses'][0]
-        
+
+#        pp = pprint.PrettyPrinter(indent=4)
+#        if 'response_extensions' in tbs_response and tbs_response['response_extensions'].native != None:
+#            pp.pprint(tbs_response['response_extensions'].native)
+#
+#        pp.pprint(parsed_response.native)
+#        pp.pprint(tbs_response.native)
+#        print(parsed_response.native)
+
         certificate_id = certificate_response['cert_id']
         algo = certificate_id['hash_algorithm']['algorithm'].native
 
@@ -77,9 +93,12 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         if current_time < this_update_time:
             errors['ThisUpdateTimeError'] = 'OCSP reponse update time is from the future'
 
-        next_update_time = certificate_response['next_update'].native
-        if current_time > next_update_time:
-            errors['NextUpdateTimeFailure'] = 'OCSP reponse next update time is in the past'
+        if "next_update" not in certificate_response:
+            warnings['NextUpdateTimeMissing'] = 'OCSP response does not contain next update time'
+        else:
+            next_update_time = certificate_response['next_update'].native
+            if current_time > next_update_time:
+                errors['NextUpdateTimeFailure'] = 'OCSP reponse next update time is in the past'
     
         registry = CertificateRegistry(trust_roots=[issuer])
 
@@ -173,31 +192,40 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             else:
                 errors['CertificateValidityFailure'] = 'Certicate revoked due to ' + revocation_data['revocation_reason'].human_friendly
 
-        if len(errors) == 0:
-            errors['NoFailure'] = 'No errors in OCSP response'
+        if 'certs' in parsed_response and parsed_response['certs'].native != None:
+            #TODO Check for legit certs
+            pass
+#            print(parsed_response['certs'].native)
 
-        return json.dumps(errors)
+        #if len(errors) == 0:
+        if len(errors) == 2:
+            errors['NoFailure'] = 'No errors in OCSP response'
+        if len(warnings) == 2:
+            warnings['NoWarning'] = 'No warnings in OCSP response'
+
+        return (json.dumps(errors), json.dumps(warnings))
 
 if __name__ == '__main__':
-
-  cert_file = sys.argv[1]
-  issuer_file = sys.argv[2]
-  try:
-      cert = hf.return_cert_from_file(cert_file)
-  except ValueError:
-      raise TypeError("{} is not a valid x509 certificate".format(cert_file))
-  try:
-      issuer = hf.return_cert_from_file(issuer_file)
-  except ValueError:
-      raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
-
-  current_time = datetime.now(timezone.utc)   
-  response = get_ocsp_response(cert, issuer, 'sha256', True)
-  ocsp_request = response[0]
-  ocsp_responses = response[1]
+    cert_file = sys.argv[1]
+    issuer_file = sys.argv[2]
+    try:
+        cert = hf.return_cert_from_file(cert_file)
+    except ValueError:
+        raise TypeError("{} is not a valid x509 certificate".format(cert_file))
+    try:
+        issuer = hf.return_cert_from_file(issuer_file)
+    except ValueError:
+        raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
     
-  errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
-  print (errors)
-
-
+    current_time = datetime.now(timezone.utc)   
+    response = get_ocsp_response(cert, issuer, 'sha256', True)
+    ocsp_request = response[0]
+    ocsp_responses = response[1]
+      
+    (errors, warnings) = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+#    pp = pprint.PrettyPrinter(indent=4)
+#    pp.pprint(errors) 
+#    pp.pprint(warnings) 
+    print(errors)
+    print(warnings)
 
