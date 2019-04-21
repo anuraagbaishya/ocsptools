@@ -40,6 +40,11 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         #print(ocsp_response_obj.native)
         errors[ocsp_url] = {}
         warnings[ocsp_url] = {}
+
+        if (ocsp_response_obj['response_status'].native == 'unauthorized'):
+            errors[ocsp_url]['Unauthorized'] = 'Repsonder returned unauthorized'
+            return (json.dumps(errors), json.dumps(warnings))
+
         if (ocsp_response_obj['response_status'].native == 'malformed_request'):
             errors[ocsp_url]['ResponseFailure'] = 'Failed to query OCSP responder'
             return (json.dumps(errors), json.dumps(warnings))
