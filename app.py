@@ -46,7 +46,7 @@ def response_check():
 			ocsp_request = response[0]
 			ocsp_responses = response[1]
 
-			errors = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+			(errors, warnings) = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
 			return errors
 
 if __name__ == "__main__":

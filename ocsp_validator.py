@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from certvalidator.registry import CertificateRegistry
 from oscrypto import asymmetric
 import json, pprint
+import sqlite3
+
 
 def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
 
@@ -33,33 +35,44 @@ def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
 def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, current_time):
     #print(cert.ocsp_urls) # Just to see how many urls there are
     subject = cert['tbs_certificate']['subject'].native
-    errors = {'domain' : subject['common_name']}
-    warnings = {'domain': subject['common_name']}
+    errors = {}
+    warnings = {}
+    lints_list = []
+    count = 0
+    lints = {}
 
     for (ocsp_url, ocsp_response_obj) in ocsp_response_objs:
+        count += 1
+        lints['domain'] = subject['common_name']
+        lints['ocsp_url'] = ocsp_url
+        lints['response_count'] = count
         #print(ocsp_response_obj.native)
-        errors[ocsp_url] = {}
-        warnings[ocsp_url] = {}
+        errors = {}
+        warnings = {}
 
         if (ocsp_response_obj['response_status'].native == 'unauthorized'):
-            errors[ocsp_url]['Unauthorized'] = 'Repsonder returned unauthorized'
-            return (json.dumps(errors), json.dumps(warnings))
+            errors['Unauthorized'] = 'Repsonder returned unauthorized'
+            lints['errors'] = errors
+            lints['warnings'] = warnings
+            lints_list.append(lints)
 
         if (ocsp_response_obj['response_status'].native == 'malformed_request'):
-            errors[ocsp_url]['ResponseFailure'] = 'Failed to query OCSP responder'
-            return (json.dumps(errors), json.dumps(warnings))
+            errors['ResponseFailure'] = 'Failed to query OCSP responder'
+            lints['errors'] = errors
+            lints['warnings'] = warnings
+            lints_list.append(lints)
 
         request_nonce = ocsp_request_obj.nonce_value
         response_nonce = ocsp_response_obj.nonce_value
         if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
-            errors[ocsp_url]['NonceVerificationFailure'] = 'Unable to verify OCSP response since the request and response nonces do not match'
+            errors['NonceVerificationFailure'] = 'Unable to verify OCSP response since the request and response nonces do not match'
 
         if ocsp_response_obj['response_status'].native != 'successful':
-            errors[ocsp_url]['OCSPCheckFailure'] = 'OCSP check returned as failed'
+            errors['OCSPCheckFailure'] = 'OCSP check returned as failed'
 
         response_bytes = ocsp_response_obj['response_bytes']
         if response_bytes['response_type'].native != 'basic_ocsp_response':
-            errors[ocsp_url]['ResponseTypeFailure'] = 'OCSP response is not Basic OCSP Response'
+            errors['ResponseTypeFailure'] = 'OCSP response is not Basic OCSP Response'
     
         parsed_response = response_bytes['response'].parsed
         tbs_response = parsed_response['tbs_response_data']
@@ -77,26 +90,26 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         certificate_serial_number_from_file = cert.serial_number
 
         if certificate_serial_number != certificate_serial_number_from_file:
-            errors[ocsp_url]['CertificateSerialMismatchFailure'] = \
+            errors['CertificateSerialMismatchFailure'] = \
             'OCSP response certificate serial number does not match request certificate serial number'
 
         if certificate_issuer_key_hash != certificate_issuer_key_hash_from_file:
-            errors[ocsp_url]['IssuerKeyMismatchFailure'] = 'OCSP response issuer key hash does not match request certificate issuer key hash'
+            errors['IssuerKeyMismatchFailure'] = 'OCSP response issuer key hash does not match request certificate issuer key hash'
 
         if certificate_issuer_name_hash != certificate_issuer_name_hash_from_file:
-            errors[ocsp_url]['IssuerNameHashMismatchFailure'] = \
+            errors['IssuerNameHashMismatchFailure'] = \
                 'OCSP response issuer name hash does not match request certificate issuer name hash'
 
         this_update_time = certificate_response['this_update'].native
         if current_time < this_update_time:
-            errors[ocsp_url]['ThisUpdateTimeError'] = 'OCSP reponse update time is from the future'
+            errors['ThisUpdateTimeError'] = 'OCSP reponse update time is from the future'
 
         if "next_update" not in certificate_response:
-            warnings[ocsp_url]['NextUpdateTimeMissing'] = 'OCSP response does not contain next update time'
+            warnings['NextUpdateTimeMissing'] = 'OCSP response does not contain next update time'
         else:
             next_update_time = certificate_response['next_update'].native
             if current_time > next_update_time:
-                errors[ocsp_url]['NextUpdateTimeFailure'] = 'OCSP reponse next update time is in the past'
+                errors['NextUpdateTimeFailure'] = 'OCSP reponse next update time is in the past'
     
         registry = CertificateRegistry(trust_roots=[issuer])
 
@@ -104,8 +117,10 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             key_identifier = tbs_response['responder_id'].native
             signing_cert = registry.retrieve_by_key_identifier(key_identifier)
             if signing_cert is None:
-                errors[ocsp_url]['SigningCetificateNotFoundFailure'] = 'OCSP response signing certificate not found'
-                return (json.dumps(errors), json.dumps(warnings))
+                errors['SigningCetificateNotFoundFailure'] = 'OCSP response signing certificate not found'
+                lints['errors'] = errors
+                lints['warnings'] = warnings
+                lints_list.append(lints)
         # if not registry.is_ca(signing_cert):
         #   signing_cert_paths = certificate_registry.build_paths(signing_cert)
         #   for signing_cert_path in signing_cert_paths:
@@ -158,11 +173,11 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 
         if issuer.issuer_serial != signing_cert.issuer_serial:
             if signing_cert_issuer.issuer_serial != issuer.issuer_serial:
-                errors[ocsp_url]['UnauthorizedSigningCertificateFailure'] = 'OCSP response signed by unauthorized certificate'
+                errors['UnauthorizedSigningCertificateFailure'] = 'OCSP response signed by unauthorized certificate'
 
             extended_key_usage = signing_cert.extended_key_usage_value
             if 'ocsp_signing' not in extended_key_usage.native:
-                errors[ocsp_url]['ExtendedKeyUsageExtensionValueFailure'] = \
+                errors['ExtendedKeyUsageExtensionValueFailure'] = \
                     'OCSP response signing certificate is not the issuing certificate and it does not have value "ocsp_signing"\
                     for the extended key usage extension'           
 
@@ -178,17 +193,17 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             elif sig_algo == 'ecdsa':
                 asymmetric.ecdsa_verify(check_cert, parsed_response['signature'].native, tbs_response.dump(), hash_algo)
             else:
-                errors[ocsp_url]['UnsupportedAlgorithmFailure'] = 'OCSP response signature uses unsupported algorithm'
+                errors['UnsupportedAlgorithmFailure'] = 'OCSP response signature uses unsupported algorithm'
 
         except(oscrypto.errors.SignatureError):
-            errors[ocsp_url]['SignatureVerificationFailure'] = 'OCSP response signature could not be verified'
+            errors['SignatureVerificationFailure'] = 'OCSP response signature could not be verified'
 
         if certificate_response['cert_status'].name == 'revoked':
             revocation_data = certificate_response['cert_status'].chosen
             if revocation_data['revocation_reason'].native is None:
-                errors[ocsp_url]['CertificateValidityFailure'] = 'Certificate revoked due to unknown reason'
+                errors['CertificateValidityFailure'] = 'Certificate revoked due to unknown reason'
             else:
-                errors[ocsp_url]['CertificateValidityFailure'] = 'Certicate revoked due to ' + revocation_data['revocation_reason'].human_friendly
+                errors['CertificateValidityFailure'] = 'Certicate revoked due to ' + revocation_data['revocation_reason'].human_friendly
 
         if 'certs' in parsed_response and parsed_response['certs'].native != None:
             #TODO Check for legit certs
@@ -196,12 +211,16 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
 #            print(parsed_response['certs'].native)
 
         #if len(errors) == 0:
-        if len(errors[ocsp_url]) == 0:
-            errors[ocsp_url]['NoFailure'] = 'No errors in OCSP response'
-        if len(warnings[ocsp_url]) == 0:
-            warnings[ocsp_url]['NoWarning'] = 'No warnings in OCSP response'
+        if len(errors) == 0:
+            errors['NoFailure'] = 'No errors in OCSP response'
+        if len(warnings) == 0:
+            warnings['NoWarning'] = 'No warnings in OCSP response'
 
-    return (json.dumps(errors), json.dumps(warnings))
+        lints['errors'] = errors
+        lints['warnings'] = warnings
+        lints_list.append(lints)
+
+    return lints_list
 
 if __name__ == '__main__':
     cert_file = sys.argv[1]
@@ -216,14 +235,39 @@ if __name__ == '__main__':
         raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
     
     current_time = datetime.now(timezone.utc)   
+    #TODO: pass actual algorithm
     response = get_ocsp_response(cert, issuer, 'sha256', True)
     ocsp_request = response[0]
     ocsp_responses = response[1]
       
-    (errors, warnings) = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+    lints_list = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+
+    connection = sqlite3.connect("lints.db")
+    cursor = connection.cursor()
+    create_table_query = "CREATE TABLE IF NOT EXISTS LINTS (id INTEGER PRIMARY KEY, domain TEXT, ocspurl TEXT, count INTEGER, errors TEXT, warnings TEXT)"
+    cursor.execute(create_table_query)
+
+    for lint in lints_list:
+
+        domain = lint['domain']
+        ocsp_url = lint['ocsp_url']
+        errors = lint['errors']
+        warnings = lint['warnings']
+        count = lint['response_count']
+        insert_query = "INSERT INTO LINTS (domain, ocspurl, count, errors, warnings) values (?,?,?,?,?)"
+        cursor.execute(insert_query, (domain, ocsp_url, count, json.dumps(errors), json.dumps(warnings), ))
+
+    cursor.execute("SELECT * FROM LINTS")  
+  
+    # store all the fetched data in the ans variable 
+    ans= cursor.fetchall()  
+      
+    #loop to print all the data 
+    for i in ans: 
+        print(i) 
 #    pp = pprint.PrettyPrinter(indent=4)
 #    pp.pprint(errors) 
 #    pp.pprint(warnings) 
-    print(errors)
-    print(warnings)
+    # print(errors)
+    # print(warnings)
 

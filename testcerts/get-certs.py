@@ -18,10 +18,16 @@ def find_errors(error):
         return "handshake failure"
     elif "Connection refused" in error:
         return "connection refused"
-    elif "gethostbyname failure" in error:
-        return "hostname not found"
+    elif "gethostbyname failure" in error or "Name or service not known" in error:
+        return "hostname not found" 
     else:
         return "errored"
+
+def write_to_file(filename, mode, data):
+
+    with open(filename, mode) as f:
+        f.write(data)
+        f.close() 
 
 def openssl_call(domain):
     cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443"
@@ -30,7 +36,7 @@ def openssl_call(domain):
     output, errors = (p.communicate())
     return (output, errors)
 
-def check_certs(output, errors):
+def check_certs(url, output, errors):
 
     if output.decode('utf-8') != "":
         certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
@@ -38,24 +44,27 @@ def check_certs(output, errors):
         #print("Cert from {0}:\n {1}".format(d, certs)) 
         if len(certs) == 0:
             error = find_errors(errors.decode('utf-8'))
-            cert = error
-            cert_chain = [error]
             print("..." + error)
+            write_to_file("errors.txt", "a+", url + ":" + error + "\n")
+            return (None, None)
         else:
             print("...done")
             cert = certs[0]
             cert_chain = certs[1:]
+            return (cert, cert_chain)
+
     elif errors.decode('utf-8') != "":
 
         error = find_errors(errors.decode('utf-8'))
-        cert = error
-        cert_chain = [error]
         print("..." + error)
+        write_to_file("errors.txt", "a+", url + ":" + error + "\n")
+        return (None, None)
 
     elif output.decode('utf-8') == "":
-        cert = "TIMED OUT"
-        cert_chain = ["TIMED OUT"]
-        print("...timed out")    
+        error = "timed out"
+        print("...timed out")
+        write_to_file("errors.txt", "a+", url + ":" + error + "\n")
+        return (None, None)    
 
     return (cert, cert_chain)    
 
@@ -80,16 +89,16 @@ def main(domain_file):
                 print ("...redirecting")
                 try:
                     r = requests.get("https://"+d)
-                    url = urlparse(r.url).hostname
-                    out = openssl_call(url)
+                    d = urlparse(r.url).hostname
+                    out = openssl_call(d)
                     output = out[0]
                     errors = out[1]
                 except:
                     pass
 
-            cert_data = check_certs(output, errors)
+            cert_data = check_certs(d, output, errors)
 
-            if cert_data[0] != "hostname not found":
+            if cert_data[0] is not None:
 
                 with open (os.path.join("cert", filename), "w+") as f:
                     f.write(cert_data[0])
