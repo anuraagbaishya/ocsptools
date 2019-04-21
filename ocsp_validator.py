@@ -55,14 +55,17 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             lints['errors'] = errors
             lints['warnings'] = warnings
             lints_list.append(lints)
+            continue
 
         if (ocsp_response_obj['response_status'].native == 'malformed_request'):
             errors['ResponseFailure'] = 'Failed to query OCSP responder'
             lints['errors'] = errors
             lints['warnings'] = warnings
             lints_list.append(lints)
+            continue
 
         request_nonce = ocsp_request_obj.nonce_value
+        print (ocsp_response_obj.native)
         response_nonce = ocsp_response_obj.nonce_value
         if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
             errors['NonceVerificationFailure'] = 'Unable to verify OCSP response since the request and response nonces do not match'
@@ -121,6 +124,7 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
                 lints['errors'] = errors
                 lints['warnings'] = warnings
                 lints_list.append(lints)
+                continue
         # if not registry.is_ca(signing_cert):
         #   signing_cert_paths = certificate_registry.build_paths(signing_cert)
         #   for signing_cert_path in signing_cert_paths:
