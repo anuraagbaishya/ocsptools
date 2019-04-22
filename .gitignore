@@ -4,6 +4,10 @@ venv/
 *.pyc
 *.pem
 *.csv
+osc
+*.db
+*.txt
+testcerts/*.txt
 testcerts/test
 test.py
 /uploads

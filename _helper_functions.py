@@ -53,4 +53,4 @@ def make_ocsp_request(ocsp_url, ocsp_request_obj, timeout=20):
 		ocsp_response_obj = ocsp.OCSPResponse.load(ocsp_response_data)
 		return ocsp_response_obj
 	except Exception as e:
-		print(e)
+		return e

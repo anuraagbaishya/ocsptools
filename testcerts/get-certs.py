@@ -14,14 +14,27 @@ def find_between(s, first, last):
     return result
 
 def find_errors(error):
+    error_string = ""
+    flag = 0
+    if "self signed certificate" in error:
+        flag += 1
+        error_string += "self signed\t"
+    if "certificate has expired" in error:
+        flag += 1
+        error_string += "certificate expired\t"
     if "handshake failure" in error:
-        return "handshake failure"
-    elif "Connection refused" in error:
-        return "connection refused"
-    elif "gethostbyname failure" in error or "Name or service not known" in error:
-        return "hostname not found" 
-    else:
-        return "errored"
+        flag += 1
+        error_string += "handshake failure\t"
+    if "Connection refused" in error:
+        flag += 1
+        error_string += "connection refused\t"
+    if "gethostbyname failure" in error or "Name or service not known" in error:
+        flag += 1
+        error_string += "hostname not found\t" 
+    if flag == 0:
+        error_string += "errored\t"
+
+    return error_string
 
 def write_to_file(filename, mode, data):
 
@@ -42,8 +55,10 @@ def check_certs(url, output, errors):
         certs = (find_between(output.decode('utf-8'), "-----BEGIN CERTIFICATE-----", "-----END CERTIFICATE-----"))
         #certs = re.search(r'-----BEGIN CERTIFICATE-----(.*)-----END CERTIFICATE-----',output.decode('utf-8')) TODO Optional way to do it
         #print("Cert from {0}:\n {1}".format(d, certs)) 
-        if len(certs) == 0:
+        if len(certs) < 2:
             error = find_errors(errors.decode('utf-8'))
+            if error == "errored\t" and len(certs) == 1:
+                error = "Chain certificate not provided"
             print("..." + error)
             write_to_file("errors.txt", "a+", url + ":" + error + "\n")
             return (None, None)
@@ -57,13 +72,13 @@ def check_certs(url, output, errors):
 
         error = find_errors(errors.decode('utf-8'))
         print("..." + error)
-        write_to_file("errors.txt", "a+", url + ":" + error + "\n")
+        write_to_file("errors.txt", "a+", url + ":" + error+ "\n")
         return (None, None)
 
     elif output.decode('utf-8') == "":
         error = "timed out"
         print("...timed out")
-        write_to_file("errors.txt", "a+", url + ":" + error + "\n")
+        write_to_file("errors.txt", "a+", url + ":" + error+ "\n")
         return (None, None)    
 
     return (cert, cert_chain)    

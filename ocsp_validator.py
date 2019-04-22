@@ -5,7 +5,7 @@ from certvalidator.registry import CertificateRegistry
 from oscrypto import asymmetric
 import json, pprint
 import sqlite3
-
+import urllib
 
 def get_ocsp_response(cert, issuer, algo='sha1', nonce=True, timeout=20):
 
@@ -49,6 +49,19 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         #print(ocsp_response_obj.native)
         errors = {}
         warnings = {}
+        if isinstance(ocsp_response_obj, urllib.error.HTTPError):
+            errors['HTTPError'] = str(ocsp_response_obj)
+            lints['errors'] = errors
+            lints['warnings'] = warnings
+            lints_list.append(lints)
+            return lints_list
+
+        if isinstance(ocsp_response_obj, ValueError):
+            errors['ValueError'] = str(ocsp_response_obj)
+            lints['errors'] = errors
+            lints['warnings'] = warnings
+            lints_list.append(lints)
+            return lints_list
 
         if (ocsp_response_obj['response_status'].native == 'unauthorized'):
             errors['Unauthorized'] = 'Repsonder returned unauthorized'
@@ -107,7 +120,7 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         if current_time < this_update_time:
             errors['ThisUpdateTimeError'] = 'OCSP reponse update time is from the future'
 
-        if "next_update" not in certificate_response:
+        if "next_update" not in certificate_response or certificate_response['next_update'].native is None:
             warnings['NextUpdateTimeMissing'] = 'OCSP response does not contain next update time'
         else:
             next_update_time = certificate_response['next_update'].native
@@ -119,61 +132,20 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
         if tbs_response['responder_id'].name == 'by_key':
             key_identifier = tbs_response['responder_id'].native
             signing_cert = registry.retrieve_by_key_identifier(key_identifier)
-            if signing_cert is None:
-                errors['SigningCetificateNotFoundFailure'] = 'OCSP response signing certificate not found'
-                lints['errors'] = errors
-                lints['warnings'] = warnings
-                lints_list.append(lints)
-                continue
-        # if not registry.is_ca(signing_cert):
-        #   signing_cert_paths = certificate_registry.build_paths(signing_cert)
-        #   for signing_cert_path in signing_cert_paths:
-        #       try:
-        #           # Store the original revocation check value
-        #           changed_revocation_flags = False
+        
+        elif tbs_response['responder_id'].name == 'by_name':
+            signing_certs = registry.retrieve_by_name(tbs_response['responder_id'].chosen, None)
+            if signing_certs is not None and len(signing_certs) > 0:
+                signing_cert = signing_certs[0]
+            else:
+                signing_cert = None    
 
-        #           skip_ocsp = False if signing_cert.ocsp_no_check_value is not None else True
-        #           skip_ocsp = True if signing_cert_path == path else False
-
-            #TODO: Understand this code!
-            #       if skip_ocsp and validation_context._skip_revocation_checks is False:
-            #           changed_revocation_flags = True
-
-            #           original_revocation_mode = validation_context.revocation_mode
-            #           new_revocation_mode = "soft-fail" if original_revocation_mode == "soft-fail" else "hard-fail"
-
-            #           validation_context._skip_revocation_checks = True
-            #           validation_context._revocation_mode = new_revocation_mode
-
-            #       if end_entity_name_override is None and signing_cert.sha256 != issuer.sha256:
-            #           end_entity_name_override = cert_description + ' OCSP responder'
-            #       _validate_path(
-            #           validation_context,
-            #           signing_cert_path,
-            #           end_entity_name_override=end_entity_name_override
-            #       )
-            #       signing_cert_issuer = signing_cert_path.find_issuer(signing_cert)
-            #       break
-
-            #   except (PathValidationError):
-            #       continue
-
-            #   finally:
-            #       if changed_revocation_flags:
-            #           validation_context._skip_revocation_checks = False
-            #           validation_context._revocation_mode = original_revocation_mode
-
-            # else:
-            #   failures.update((
-            #       pretty_message(
-            #           '''
-            #           Unable to verify OCSP response since response signing
-            #           certificate could not be validated
-            #           '''
-            #       ),
-            #       ocsp_response
-            #   ))
-            #   continue   
+        if signing_cert is None:
+            errors['SigningCetificateNotFoundFailure'] = 'OCSP response signing certificate not found'
+            lints['errors'] = errors
+            lints['warnings'] = warnings
+            lints_list.append(lints)
+            continue
 
         if issuer.issuer_serial != signing_cert.issuer_serial:
             if signing_cert_issuer.issuer_serial != issuer.issuer_serial:
@@ -214,7 +186,6 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             pass
 #            print(parsed_response['certs'].native)
 
-        #if len(errors) == 0:
         if len(errors) == 0:
             errors['NoFailure'] = 'No errors in OCSP response'
         if len(warnings) == 0:
@@ -243,7 +214,7 @@ if __name__ == '__main__':
     response = get_ocsp_response(cert, issuer, 'sha256', True)
     ocsp_request = response[0]
     ocsp_responses = response[1]
-      
+    
     lints_list = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
 
     connection = sqlite3.connect("lints.db")
@@ -263,20 +234,8 @@ if __name__ == '__main__':
 
     connection.commit()
 
-    #cursor.execute("SELECT * FROM LINTS")  
-  
-    ## store all the fetched data in the ans variable 
-    #ans= cursor.fetchall()  
-    #print("got to datbase")      
-    ##loop to print all the data 
-    #for i in ans: 
-    #    print(i) 
-
     cursor.close()
     connection.close()
-#    pp = pprint.PrettyPrinter(indent=4)
-#    pp.pprint(errors) 
-#    pp.pprint(warnings) 
-    # print(errors)
-    # print(warnings)
+
+    print (lints_list)
 
