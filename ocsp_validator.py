@@ -65,7 +65,7 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             continue
 
         request_nonce = ocsp_request_obj.nonce_value
-        print (ocsp_response_obj.native)
+        #print (ocsp_response_obj.native)
         response_nonce = ocsp_response_obj.nonce_value
         if request_nonce and response_nonce and request_nonce.native != response_nonce.native:
             errors['NonceVerificationFailure'] = 'Unable to verify OCSP response since the request and response nonces do not match'
@@ -261,14 +261,19 @@ if __name__ == '__main__':
         insert_query = "INSERT INTO LINTS (domain, ocspurl, count, errors, warnings) values (?,?,?,?,?)"
         cursor.execute(insert_query, (domain, ocsp_url, count, json.dumps(errors), json.dumps(warnings), ))
 
-    cursor.execute("SELECT * FROM LINTS")  
+    connection.commit()
+
+    #cursor.execute("SELECT * FROM LINTS")  
   
-    # store all the fetched data in the ans variable 
-    ans= cursor.fetchall()  
-      
-    #loop to print all the data 
-    for i in ans: 
-        print(i) 
+    ## store all the fetched data in the ans variable 
+    #ans= cursor.fetchall()  
+    #print("got to datbase")      
+    ##loop to print all the data 
+    #for i in ans: 
+    #    print(i) 
+
+    cursor.close()
+    connection.close()
 #    pp = pprint.PrettyPrinter(indent=4)
 #    pp.pprint(errors) 
 #    pp.pprint(warnings) 
