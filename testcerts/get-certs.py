@@ -43,7 +43,7 @@ def write_to_file(filename, mode, data):
         f.close() 
 
 def openssl_call(domain):
-    cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443 -servername" + domain
+    cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443 -servername " + domain
     cmdarg = shlex.split(cmd)
     p = sub.Popen(cmdarg,stdin =sub.PIPE, stdout=sub.PIPE,stderr=sub.PIPE)
     output, errors = (p.communicate())
