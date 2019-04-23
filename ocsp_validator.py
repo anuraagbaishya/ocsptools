@@ -210,8 +210,14 @@ if __name__ == '__main__':
         raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
     
     current_time = datetime.now(timezone.utc)   
-    #TODO: pass actual algorithm
-    response = get_ocsp_response(cert, issuer, 'sha256', True)
+    
+    algo = cert['signature_algorithm']['algorithm'].native
+    if algo == "sha256_rsa":
+        algo = "sha256"
+    elif algo == "sha1_rsa":
+        algo = "sha1"
+
+    response = get_ocsp_response(cert, issuer, algo, True)
     ocsp_request = response[0]
     ocsp_responses = response[1]
     

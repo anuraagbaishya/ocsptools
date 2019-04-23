@@ -4,6 +4,8 @@ import sys, os
 import re
 import requests
 from urllib.parse import urlparse
+import sqlite3
+
 def find_between(s, first, last):
     result = []
     while last in s:
@@ -43,7 +45,7 @@ def write_to_file(filename, mode, data):
         f.close() 
 
 def openssl_call(domain):
-    cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443 -servername" + domain
+    cmd = "timeout 10 openssl s_client -showcerts -connect " + domain +":443 -servername " + domain
     cmdarg = shlex.split(cmd)
     p = sub.Popen(cmdarg,stdin =sub.PIPE, stdout=sub.PIPE,stderr=sub.PIPE)
     output, errors = (p.communicate())
@@ -61,7 +63,7 @@ def check_certs(url, output, errors):
                 error = "Chain certificate not provided"
             print("..." + error)
             write_to_file("errors.txt", "a+", url + ":" + error + "\n")
-            return (None, None)
+            return (None, error)
         else:
             print("...done")
             cert = certs[0]
@@ -73,17 +75,23 @@ def check_certs(url, output, errors):
         error = find_errors(errors.decode('utf-8'))
         print("..." + error)
         write_to_file("errors.txt", "a+", url + ":" + error+ "\n")
-        return (None, None)
+        return (None, error)
 
     elif output.decode('utf-8') == "":
         error = "timed out"
         print("...timed out")
         write_to_file("errors.txt", "a+", url + ":" + error+ "\n")
-        return (None, None)    
+        return (None, error)    
 
     return (cert, cert_chain)    
 
 def main(domain_file):
+    connection = sqlite3.connect("../lints.db")
+    cursor = connection.cursor()
+    create_table_query = "CREATE TABLE IF NOT EXISTS DOMAINS (id INTEGER PRIMARY KEY, domain TEXT, cert TEXT, chain INTEGER, errors TEXT)"
+    cursor.execute(create_table_query)
+    connection.commit()
+
     output, errors = b"", b""
     try:
         with open(domain_file, "r") as f:
@@ -113,7 +121,13 @@ def main(domain_file):
 
             cert_data = check_certs(d, output, errors)
 
+            insert_no_error_query = "INSERT INTO DOMAINS (domain, cert, chain) values (?,?,?)"
+            insert_error_query = "INSERT INTO DOMAINS (domain, errors) values (?,?)"
+
             if cert_data[0] is not None:
+
+                cursor.execute(insert_no_error_query, (d, filename, filename_chain,))
+                connection.commit()
 
                 with open (os.path.join("cert", filename), "w+") as f:
                     f.write(cert_data[0])
@@ -122,10 +136,16 @@ def main(domain_file):
                     for c in cert_data[1]:
                         f.write(c)
                     f.close()
+            else:
+                cursor.execute(insert_error_query, (d, cert_data[1],))
+                connection.commit()
 
     except (OSError, IOError) as e:
         print("Error in opening file {}".format(domain_file))
         print(e)
+
+    cursor.close()
+    connection.close()
 
 if __name__ == '__main__':
 #TODO Add clean up functionality
