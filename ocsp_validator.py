@@ -64,14 +64,14 @@ def validate_ocsp_response(cert, issuer, ocsp_request_obj, ocsp_response_objs, c
             return lints_list
 
         if (ocsp_response_obj['response_status'].native == 'unauthorized'):
-            errors['Unauthorized'] = 'Repsonder returned unauthorized'
+            errors['Unauthorized'] = 'Responder returned unauthorized'
             lints['errors'] = errors
             lints['warnings'] = warnings
             lints_list.append(lints)
             continue
 
         if (ocsp_response_obj['response_status'].native == 'malformed_request'):
-            errors['ResponseFailure'] = 'Failed to query OCSP responder'
+            errors['ResponseFailure'] = 'Responder returned malformed request'
             lints['errors'] = errors
             lints['warnings'] = warnings
             lints_list.append(lints)
@@ -210,7 +210,7 @@ if __name__ == '__main__':
         raise TypeError("{} is not a valid x509 certificate".format(issuer_file))
     
     current_time = datetime.now(timezone.utc)   
-    
+
     algo = cert['signature_algorithm']['algorithm'].native
     if algo == "sha256_rsa":
         algo = "sha256"
@@ -220,7 +220,7 @@ if __name__ == '__main__':
     response = get_ocsp_response(cert, issuer, algo, True)
     ocsp_request = response[0]
     ocsp_responses = response[1]
-    
+    print (cert_file[cert_file.rfind("/")+1:cert_file.find(".pem")])
     lints_list = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
 
     connection = sqlite3.connect("lints.db")
@@ -243,5 +243,5 @@ if __name__ == '__main__':
     cursor.close()
     connection.close()
 
-    print (lints_list)
+    print (lints_list[0])
 

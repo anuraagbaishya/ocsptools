@@ -13,3 +13,7 @@ test.py
 /uploads
 .DS_Store
 /static/.DS_Store
+/testcerts/cert
+/testcerts/chain
+/testcerts/t
+

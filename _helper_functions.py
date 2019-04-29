@@ -44,7 +44,8 @@ def return_ocsp_request_object(cert, issuer, algo, nonce=True):
 def make_ocsp_request(ocsp_url, ocsp_request_obj, timeout=20):
 	headers = {
 		'Content-Type': 'application/ocsp-request',
-		'Accept': 'application/ocsp-response'
+		'Accept': 'application/ocsp-response',
+		'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36'
 	}
 	try:
 		ocsp_request = request.Request(ocsp_url, headers=headers)
