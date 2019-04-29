@@ -20,7 +20,6 @@ $(document).ready(function () {
                 success: function (data) {
 
                     localStorage.setItem('ocsp-response', data);
-                    //console.log(data)
                     window.location.href = window.location.protocol + "//" + window.location.host + "/response"
                     //console.log(window.location)
                 },
@@ -38,20 +37,27 @@ $(document).ready(function () {
         
         var json_response = localStorage.getItem('ocsp-response');
         var json_obj = JSON.parse(json_response)
+        var error_ul = document.getElementById("error-lint-list");
+        var warn_ul = document.getElementById("warning-lint-list");
 
-        var ul = document.getElementById("lint-list");
-        for (var key in json_obj){
-            if (json_obj.hasOwnProperty(key)){
-                if (key == "NoFailure"){
-                    ul.appendChild(return_li(key, json_obj[key], 0))
-                    break;
-                }
-                else{
-                    ul.appendChild(return_li(key, json_obj[key], 1));
-                }
-            }
+        if (json_obj.hasOwnProperty("domain")){
+            document.getElementById("domain").innerHTML = "Domain: " + json_obj["domain"];
         }
-
+        if (json_obj.hasOwnProperty("ocsp_url")){
+            document.getElementById("ocspurl").innerHTML = "OCSP URL: " + json_obj["ocsp_url"]
+        }
+         if (json_obj.hasOwnProperty("warnings")){
+            var warn_json = json_obj["warnings"]
+            for (var warn in warn_json){
+                warn_ul.appendChild(return_li(warn, warn_json[warn], 1))
+            }
+        }  
+        if (json_obj.hasOwnProperty("errors")){
+            var error_json = json_obj["errors"]
+            for (var error in error_json){
+                error_ul.appendChild(return_li(error, error_json[error], 0))
+            }
+        }     
     }
 
 });
@@ -62,11 +68,14 @@ function return_li(key, data, flag){
     list_item.setAttribute("id", key);
     list_item.setAttribute("class", "lint-list-item");
     var img = document.createElement('img');
-    if (flag == 0){
+    if (key == "NoFailure" || key == "NoWarning"){
         img.setAttribute("src", "/static/images/success.png");
     }
-    else{
+    else if (flag == 0){
         img.setAttribute("src", "/static/images/error.png")
+    }
+    else {
+        img.setAttribute("src", "/static/images/warning.png")
     }
     img.setAttribute("height", "25px");
     img.setAttribute("width", "25px");

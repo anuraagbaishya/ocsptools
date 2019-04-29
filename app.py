@@ -3,6 +3,7 @@ from ocsp_validator import get_ocsp_response, validate_ocsp_response
 from datetime import datetime, timezone
 from werkzeug import secure_filename
 import _helper_functions as hf
+import json
 import os
 
 cwd = os.getcwd()
@@ -46,8 +47,8 @@ def response_check():
 			ocsp_request = response[0]
 			ocsp_responses = response[1]
 
-			(errors, warnings) = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
-			return errors
+			lints_list = validate_ocsp_response(cert, issuer, ocsp_request, ocsp_responses, current_time)
+			return json.dumps(lints_list[0])
 
 if __name__ == "__main__":
 	app.run(debug=True,host='0.0.0.0', port=4000)
